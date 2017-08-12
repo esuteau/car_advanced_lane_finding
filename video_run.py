@@ -90,9 +90,20 @@ def process_image(img_rgb, params, prev_line_l, prev_line_r, debug_plot=False, d
     # Verify and correct line detection if anomalies detected
     if prev_line_l != None and prev_line_r != None:
         (line_l, line_r) = verify_correct_smooth_line_detection(line_l, line_r, prev_line_l, prev_line_r, params)
-    
+
+    # Calculate statistics to overlay on image
+    params.curv_avg_m = np.mean([line_l.curv_m, line_r.curv_m])
+    params.offset_m = calc_offset_from_center(line_l, line_r, params.width, params.x_m_per_px)
+
     # Convert back to original view
     img_poly = convert_lines_to_original_view(line_l, line_r, params.width, params.height, params.M_bird_org)
+
+    # Add Text to image
+    font = cv2.FONT_HERSHEY_TRIPLEX 
+    text_offset = 'Offset: {:.2f} m'.format(params.offset_m)
+    text_curv = 'Curvature: {:.1f} m'.format(params.curv_avg_m)
+    cv2.putText(img_poly,text_offset,(10,40), font, 1,(255,255,255),2,cv2.LINE_AA)
+    cv2.putText(img_poly,text_curv,(10,90), font, 1,(255,255,255),2,cv2.LINE_AA)    
 
     # Combine original image with polygon
     img_res = cv2.addWeighted(img_undist, 1, img_poly, 0.3, 0)
@@ -272,15 +283,14 @@ if __name__ == "__main__":
     input_video = 'project_video.mp4'
     output_video = output_dir + 'output_video.mp4'
 
-3
-
     # Get parameters
     p = get_parameters()
     origin_stripe_width = p.width/2
-    p.mtx = mtx
-    p.dist = dist
     p.stripe_width_px = origin_stripe_width
     p.stripe_width_px_reduced = origin_stripe_width/2
+
+    # Calibrate Camera
+    (p.mtx, p.dist, rvecs, tvecs) = calibrate_camera()
 
     # Get source and destination polygons (For Perspective Transform)
     (src, dst) = get_src_dst_polygons(p.height, p.width, p.dst_polygon_margin)

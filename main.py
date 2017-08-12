@@ -758,6 +758,15 @@ def calc_line_coord_m(line, x_m_per_px = 3.7/700, y_m_per_px = 30.0/720):
     y_m = np.float32(line.y) * y_m_per_px
     return (x_m, y_m)
 
+def calc_offset_from_center(line_l, line_r, width, x_m_per_px):
+    # Calculates the delta between the position of the car on the road and the actual road position
+    # Returns a distance, in m
+    x_l = line_l.x_interp[-1]
+    x_r = line_r.x_interp[-1]
+    x_car_center = x_l + (x_r-x_l)/2
+    x_lane_center = width / 2
+    return (x_car_center - x_lane_center) * x_m_per_px
+
 def test_line_curvature(images):
     
     # Define stripe segmentation parameters
@@ -837,6 +846,13 @@ def convert_lines_to_original_view(line_l, line_r, width, height, Minv):
     # Warp the blank back to original image space using inverse perspective matrix (Minv)
     return cv2.warpPerspective(color_warp, Minv, (width, height))
 
+def add_stats_to_image(img, offset_m, curv_m):
+    font = cv2.FONT_HERSHEY_TRIPLEX 
+    text_offset = 'Offset from Center: {:.1f} m'.format(offset_m)
+    text_curv = 'Curvature: {:.1f} m'.format(curv_m)
+    cv2.putText(img,text_offset,(10,40), font, 1,(255,255,255),2,cv2.LINE_AA)
+    cv2.putText(img,text_curv,(10,90), font, 1,(255,255,255),2,cv2.LINE_AA)    
+
 def test_full_run(image_origin, output_folder):
     
     # Detection parameters
@@ -900,13 +916,24 @@ def test_full_run(image_origin, output_folder):
         # Calculate line curvature, for the y coordinate the closest to the car
         line_l.curv_m = calc_line_curvature_m(line_l, height * y_m_per_px)
         line_r.curv_m = calc_line_curvature_m(line_r, height * y_m_per_px)
+        curv_avg_m = np.mean([line_l.curv_m, line_r.curv_m])
+
+        # Calculate delta from center of road
+        offset_m = calc_offset_from_center(line_l, line_r, width, x_m_per_px)
         
         # Convert back to original view
         img_poly = convert_lines_to_original_view(line_l, line_r, width, height, M_bird_org)
         
         # Combine original image with polygon
         img_res = cv2.addWeighted(img_undist, 1, img_poly, 0.3, 0)
-                
+
+        # Add Text to image
+        font = cv2.FONT_HERSHEY_TRIPLEX 
+        text_offset = 'Offset: {:.2f} m'.format(offset_m)
+        text_curv = 'Curvature: {:.1f} m'.format(curv_avg_m)
+        cv2.putText(img_res,text_offset,(10,40), font, 1,(255,255,255),2,cv2.LINE_AA)
+        cv2.putText(img_res,text_curv,(10,90), font, 1,(255,255,255),2,cv2.LINE_AA)    
+
         # Plot image and coordinates of lines
         f, ax1 = plt.subplots(1, 1, figsize=(16, 8))
         f.tight_layout()
